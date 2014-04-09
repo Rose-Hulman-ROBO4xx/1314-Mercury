@@ -1,0 +1,26 @@
+#######################################
+# Syntax Coloring Map TankDrive#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+TankDrive	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+initializeMotors	KEYWORD2
+initializeInterrupts	KEYWORD2
+driveForward	KEYWORD2
+driveBackward	KEYWORD2
+stop	KEYWORD2
+rotateCW	KEYWORD2
+rotateCCW	KEYWORD2
+drive		KEYWORD2
+countTicks1	KEYWORD2
+countTicks2	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################

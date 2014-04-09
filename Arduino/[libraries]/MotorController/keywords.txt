@@ -1,0 +1,22 @@
+#######################################
+# Syntax Coloring Map MotorController
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+MotorController	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+initialize	KEYWORD2
+move	KEYWORD2
+moveForward	KEYWORD2
+moveBackward	KEYWORD2
+stop	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
