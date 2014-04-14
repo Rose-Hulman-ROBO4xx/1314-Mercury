@@ -20,15 +20,14 @@
 */
 
  void TankDrive::driveForward(int pwmMotor) {
-	_m1.moveBackward(pwmMotor);
-	_m2.moveForward(pwmMotor);
-}
-
- void TankDrive::driveBackward(int pwmMotor) {
 	_m1.moveForward(pwmMotor);
 	_m2.moveBackward(pwmMotor);
 }
 
+ void TankDrive::driveBackward(int pwmMotor) {
+	_m1.moveBackward(pwmMotor);
+	_m2.moveForward(pwmMotor);
+}
 
  void TankDrive::stop() {
 	_m1.stop();
@@ -36,33 +35,34 @@
 }
 
 void TankDrive::rotateCW(int pwmMotor) {
-	_m1.moveForward(pwmMotor);
-	_m2.moveForward(pwmMotor);
-}
-
-void TankDrive::rotateCCW(int pwmMotor) {
 	_m1.moveBackward(pwmMotor);
 	_m2.moveBackward(pwmMotor);
 }
 
+void TankDrive::rotateCCW(int pwmMotor) {
+	_m1.moveForward(pwmMotor);
+	_m2.moveForward(pwmMotor);
+}
+
 void TankDrive::tankDrive(int pwmMotorL, int pwmMotorR) {
 	
-	// m1 reversed due to direction of motors on tank drive robot (forward = backwards)
-	if (pwmMotorL < 0) _m1.moveForward(pwmMotorL);
-	else 			   _m1.moveBackward(pwmMotorL);
 	
-	if (pwmMotorR < 0) _m2.moveBackward(pwmMotorR);
-	else 			   _m2.moveForward(pwmMotorR);
+	if (pwmMotorL < 0) _m1.moveBackward(pwmMotorL);
+	else 			   _m1.moveForward(pwmMotorL);
+	
+	// m2 reversed due to direction of motors on tank drive robot (forward = backwards)
+	if (pwmMotorR < 0) _m2.moveForward(pwmMotorR);
+	else 			   _m2.moveBackward(pwmMotorR);
 }
 
 void TankDrive::drive(int pwmMotor, double distance) {
 	// Drive motors 1 and 4
 	if (distance > 0) {
-		_m1.move(pwmMotor, distance, false);
-		_m2.move(pwmMotor, distance, true);
-	} else {
 		_m1.move(pwmMotor, distance, true);
 		_m2.move(pwmMotor, distance, false);
+	} else {
+		_m1.move(pwmMotor, distance, false);
+		_m2.move(pwmMotor, distance, true);
 	}
 }
 

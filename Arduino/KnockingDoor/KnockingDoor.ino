@@ -6,7 +6,10 @@
 #include <string.h>
 #include <PID_v1.h>
 
-#define LAMBDA 0.95
+#define LAMBDA 0.85
+#define DIST_THRESHOLD_NORMAL 15
+#define DIST_THRESHOLD_APPROACH 9
+#define DIST_RELIABLE_LIMIT 40
 
 char manufacturer[] = "Rose-Hulman";
 char model[] = "WirelessRobotController";
@@ -65,7 +68,8 @@ enum DRIVE_STATE {
   BACKWARD,
   ROTATE_LEFT,
   ROTATE_RIGHT,
-  DRIVING_STRAIGHT
+  DRIVING_STRAIGHT,
+  APPROACH_WALL
 };
 
 DRIVE_STATE driveState = STOPPED;
@@ -163,16 +167,24 @@ void loop() {
     
     
     // Stop if see a wall (when driving forward or straight w/o override)
-    if ( (frontLeft_distance < 15 || frontRight_distance < 15)
+    if ( ( frontLeft_distance < DIST_THRESHOLD_NORMAL
+        || frontRight_distance < DIST_THRESHOLD_NORMAL )
       && (driveState == FORWARD || driveState == DRIVING_STRAIGHT)
       && isOverride == 0 ) {
       drive.stop();
       driveState = STOPPED;
       acc.write(sensorStopMessage, sizeof(sensorStopMessage));
     }
+    if ( ( frontLeft_distance < DIST_THRESHOLD_APPROACH
+        || frontRight_distance < DIST_THRESHOLD_APPROACH )
+      && driveState == APPROACH_WALL && isOverride == 0 ) {
+      drive.stop();
+      driveState = STOPPED;
+      acc.write(sensorStopMessage, sizeof(sensorStopMessage));
+    }
     //  Keep this commented until we install rear sensor
     /*
-    if (rear_distance < 15 && driveState == BACKWARD && isOverride == 0) {
+    if (rear_distance < DIST_THRESHOLD_NORMAL && driveState == BACKWARD && isOverride == 0) {
       drive.stop();
       driveState = STOPPED;
       acc.write(sensorStopMessage, sizeof(sensorStopMessage));
@@ -182,10 +194,11 @@ void loop() {
     // Drive straight PWM control step
     if (driveState == DRIVING_STRAIGHT) {
       // If the walls are close enough to be reliable
-      if (left_distance < 50 && right_distance < 50) {
+      if ( left_distance < DIST_RELIABLE_LIMIT
+        && right_distance < DIST_RELIABLE_LIMIT ) {
         double difference = left_distance - right_distance;
-        int pwmL = 220 - round(difference);
-        int pwmR = 220 + round(difference);
+        int pwmL = min(220 - round(difference),255);
+        int pwmR = min(220 + round(difference),255);
         
         drive.tankDrive(pwmL, pwmR); // Update drive to reflet those values
         
@@ -244,7 +257,8 @@ void loop() {
 
       // Do something with the recieved messages
       if (command.equalsIgnoreCase("Forward")){
-        if (frontLeft_distance > 15 && frontRight_distance > 15) { 
+        if ( frontLeft_distance > DIST_THRESHOLD_NORMAL
+          && frontRight_distance > DIST_THRESHOLD_NORMAL ) { 
           drive.driveForward(speedMotor);
           driveState = FORWARD;
           isOverride = 0;
@@ -257,7 +271,7 @@ void loop() {
         }
       }
       else if (command.equalsIgnoreCase("Reverse")){
-        if (rear_distance > 15) { 
+        if ( rear_distance > DIST_THRESHOLD_NORMAL ) { 
           drive.driveBackward(speedMotor);
           driveState = BACKWARD;
           isOverride = 0;
@@ -335,7 +349,8 @@ void loop() {
       else if (command.equalsIgnoreCase("Drive_distance")) {
         // If command is to move forward
         if (distance > 0) {
-          if (frontLeft_distance > 15 && frontRight_distance > 15) { 
+          if ( frontLeft_distance > DIST_THRESHOLD_NORMAL
+            && frontRight_distance > DIST_THRESHOLD_NORMAL ) { 
             drive.drive(speedMotor, distance);
             driveState = FORWARD;
             isOverride = 0;
@@ -349,7 +364,7 @@ void loop() {
           // If command is to move backward
         } 
         else if (distance < 0) {
-          if (rear_distance > 15) { 
+          if ( rear_distance > DIST_THRESHOLD_NORMAL ) { 
             drive.drive(speedMotor, distance);
             driveState = BACKWARD;
             isOverride = 0;
@@ -387,10 +402,26 @@ void loop() {
       }
       else if (command.equalsIgnoreCase("Tank_Drive")) {
         drive.tankDrive(speedMotorL, speedMotorR);
+        isOverride = 0;
       }
       else if (command.equalsIgnoreCase("Drive_Straight")) {
         driveState = DRIVING_STRAIGHT;
+        isOverride = 0;
        // myPID.SetMode(AUTOMATIC);
+      }
+      else if (command.equalsIgnoreCase("Approach_Wall")) {
+        if ( frontLeft_distance > DIST_THRESHOLD_APPROACH 
+          && frontRight_distance > DIST_THRESHOLD_APPROACH ) { 
+          drive.driveForward(speedMotor);
+          driveState = APPROACH_WALL;
+          isOverride = 0;
+        } 
+        else {
+          drive.stop();
+          driveState = APPROACH_WALL;
+          isOverride = 0;
+          acc.write(sensorRejectMessage, sizeof(sensorRejectMessage));
+        }
       }
     }  
   } 
