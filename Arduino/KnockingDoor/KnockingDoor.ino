@@ -12,6 +12,7 @@
 #define DIST_RELIABLE_LIMIT 40
 
 char manufacturer[] = "Rose-Hulman";
+//char model[] = "GCMADKService";
 char model[] = "WirelessRobotController";
 char versionStr[] = "1.0";
 char onMessage[] = "I have an idea!";                                                                                                                                                                                                                                                                                                                                                                                                                 
@@ -21,11 +22,11 @@ char sensorStopMessage[] = "SENSOR_STOP";
 char sensorRejectMessage[] = "SENSOR_REJECT";
 
 AndroidAccessory acc(manufacturer,
-                      model,
-                      "This program drives -a robot",
-                      versionStr,
-                      "https://sites.google.com/site/me435spring2013/",
-                      "12345");
+model,
+"This program drives -a robot",
+versionStr,
+"https://sites.google.com/site/me435spring2013/",
+"12345");
 
 char rxBuf[255];
 
@@ -62,6 +63,13 @@ double rear_distance = 0;
 double left_distance = 0;
 double right_distance = 0;
 
+// Limit Switch Pins (just place holders for now)
+int leftLimitSwitchPin = 44;
+int rightLimitSwitchPin = 45;
+
+int leftLimit = 0;
+int rightLimit = 0;
+
 enum DRIVE_STATE {
   STOPPED,
   FORWARD,
@@ -69,13 +77,27 @@ enum DRIVE_STATE {
   ROTATE_LEFT,
   ROTATE_RIGHT,
   DRIVING_STRAIGHT,
-  APPROACH_WALL
+  APPROACH_WALL,
+  DRIVING_SPIRAL
 };
 
 DRIVE_STATE driveState = STOPPED;
 
+enum INTAKE_STATE {
+  STOPPED_INTAKE,
+  INTAKE,
+  REVERSE_INTAKE,
+  EJECT
+};
+
+INTAKE_STATE intakeState = STOPPED_INTAKE;
+
 // 1 = override mode, 0 = otherwise
 int isOverride = 0;
+
+// P controller constants
+double k_p = 1.5, minValue = 150;  
+
 
 //----------PID CONTROLLER STUFF----------
 //Define Variables we'll be connecting to
@@ -109,16 +131,20 @@ void setup() {
   pinMode(left_distanceSensorPin, INPUT);
   pinMode(right_distanceSensorPin, INPUT);
 
+  // Limit Switches
+  pinMode(leftLimitSwitchPin, INPUT);
+  pinMode(rightLimitSwitchPin, INPUT);
+
   delay(1500);
   acc.powerOn();
-  
+
   //PID_input = 0;
   //PID_setpoint = 0;
 }
 
 void loop() {
   if (acc.isConnected()) {
-    
+
     // Acquire Distance Measurements
     // 3.91e-4 = ( 0.08 (slope) )*( 5.0/1023 (ticks to volts) )
     frontLeft_distance_raw = 1/(analogRead(frontLeft_distanceSensorPin)*(3.91e-4)) - 0.42;
@@ -126,10 +152,10 @@ void loop() {
     //rear_distance_raw = 1/(analogRead(rear_distanceSensorPin)*(3.91e-4)) - 0.42;
     left_distance_raw = 1/(analogRead(left_distanceSensorPin)*(3.91e-4)) - 0.42;
     right_distance_raw = 1/(analogRead(right_distanceSensorPin)*(3.91e-4)) - 0.42;
-    
+
     // Dummy variable for rear distance
     rear_distance_raw = 50;
-    
+
     // Condition distance measurements
     if (frontLeft_distance_raw > 50 || frontLeft_distance_raw < 0)
       frontLeft_distance_raw = 50;
@@ -141,42 +167,58 @@ void loop() {
       left_distance_raw = 50;
     if (right_distance_raw > 50 || right_distance_raw < 0)
       right_distance_raw = 50;
-      
+
     // Use a momentum factor LAMBDA to smooth distance measurements (LAMBDA is #define-ed)
     frontLeft_distance = ( (1-LAMBDA) * frontLeft_distance_raw ) + ( LAMBDA * frontLeft_distance );
     frontRight_distance = ( (1-LAMBDA) * frontRight_distance_raw ) + ( LAMBDA * frontRight_distance );
     rear_distance = ( (1-LAMBDA) * rear_distance_raw ) + ( LAMBDA * rear_distance );
     left_distance = ( (1-LAMBDA) * left_distance_raw ) + ( LAMBDA * left_distance );
     right_distance = ( (1-LAMBDA) * right_distance_raw ) + ( LAMBDA * right_distance );
-    
+
+    // Read Limit Switches
+//    leftLimit = digitalRead(leftLimitSwitchPin);
+//    rightLimit = digitalRead(rightLimitSwitchPin);
+    leftLimit = LOW;
+    rightLimit = LOW;
+
     // Print raw and smoothed distances for debugging purposes
     Serial.println("---------------------------------------------");
     Serial.println("Raw Distances:");
-    Serial.print("Front Left = "); Serial.println(frontLeft_distance_raw); 
-    Serial.print("Front Right = ");  Serial.println(frontRight_distance_raw);
-    Serial.print("Rear = ");  Serial.println(rear_distance_raw);
-    Serial.print("Left = "); Serial.println(left_distance_raw);
-    Serial.print("Right = ");  Serial.println(right_distance_raw);
+    Serial.print("Front Left = "); 
+    Serial.println(frontLeft_distance_raw); 
+    Serial.print("Front Right = ");  
+    Serial.println(frontRight_distance_raw);
+    Serial.print("Rear = ");  
+    Serial.println(rear_distance_raw);
+    Serial.print("Left = "); 
+    Serial.println(left_distance_raw);
+    Serial.print("Right = ");  
+    Serial.println(right_distance_raw);
     Serial.println("\nSmoothed Distances:");
-    Serial.print("Front Left = "); Serial.println(frontLeft_distance); 
-    Serial.print("Front Right = ");  Serial.println(frontRight_distance);
-    Serial.print("Rear = ");  Serial.println(rear_distance);
-    Serial.print("Left = "); Serial.println(left_distance);
-    Serial.print("Right = ");  Serial.println(right_distance);
+    Serial.print("Front Left = "); 
+    Serial.println(frontLeft_distance); 
+    Serial.print("Front Right = ");  
+    Serial.println(frontRight_distance);
+    Serial.print("Rear = ");  
+    Serial.println(rear_distance);
+    Serial.print("Left = "); 
+    Serial.println(left_distance);
+    Serial.print("Right = ");  
+    Serial.println(right_distance);
     Serial.println("---------------------------------------------\n");
-    
-    
+
+
     // Stop if see a wall (when driving forward or straight w/o override)
     if ( ( frontLeft_distance < DIST_THRESHOLD_NORMAL
-        || frontRight_distance < DIST_THRESHOLD_NORMAL )
-      && (driveState == FORWARD || driveState == DRIVING_STRAIGHT)
+      || frontRight_distance < DIST_THRESHOLD_NORMAL )
+      && (driveState == FORWARD || driveState == DRIVING_STRAIGHT || driveState == DRIVING_SPIRAL)
       && isOverride == 0 ) {
       drive.stop();
       driveState = STOPPED;
       acc.write(sensorStopMessage, sizeof(sensorStopMessage));
     }
     if ( ( frontLeft_distance < DIST_THRESHOLD_APPROACH
-        || frontRight_distance < DIST_THRESHOLD_APPROACH )
+      || frontRight_distance < DIST_THRESHOLD_APPROACH )
       && driveState == APPROACH_WALL && isOverride == 0 ) {
       drive.stop();
       driveState = STOPPED;
@@ -185,34 +227,38 @@ void loop() {
     //  Keep this commented until we install rear sensor
     /*
     if (rear_distance < DIST_THRESHOLD_NORMAL && driveState == BACKWARD && isOverride == 0) {
-      drive.stop();
-      driveState = STOPPED;
-      acc.write(sensorStopMessage, sizeof(sensorStopMessage));
-    }
-    */
-    
+     drive.stop();
+     driveState = STOPPED;
+     acc.write(sensorStopMessage, sizeof(sensorStopMessage));
+     }
+     */
+
     // Drive straight PWM control step
-    if (driveState == DRIVING_STRAIGHT) {
+    if (driveState == DRIVING_STRAIGHT || driveState == DRIVING_SPIRAL) {
       // If the walls are close enough to be reliable
       if ( left_distance < DIST_RELIABLE_LIMIT
         && right_distance < DIST_RELIABLE_LIMIT ) {
         double difference = left_distance - right_distance;
-        int pwmL = min(220 - round(difference),255);
-        int pwmR = min(220 + round(difference),255);
-        
+
+        int pwmL = min(220 - round(k_p*difference),255); 
+        if (pwmL < minValue) pwmL = 0;
+        int pwmR = min(220 + round(k_p*difference),255); 
+        if (pwmR < minValue) pwmR = 0;
+
         drive.tankDrive(pwmL, pwmR); // Update drive to reflet those values
-        
+
         // Experimental PID code
         /*
         PID_input = left_distance - right_distance;
-        myPID.Compute();
-        
-        int pwmL = round(constrain(255 + PID_output, 200, 255));
-        int pwmR = round(constrain(255 - PID_output, 200, 255));
-        
-        drive.tankDrive(pwmL, pwmR);
-        */
-      } else {
+         myPID.Compute();
+         
+         int pwmL = round(constrain(255 + PID_output, 200, 255));
+         int pwmR = round(constrain(255 - PID_output, 200, 255));
+         
+         drive.tankDrive(pwmL, pwmR);
+         */
+      }
+      else {
         // Stop if walls are far away
         drive.stop();
         driveState = STOPPED;
@@ -220,7 +266,13 @@ void loop() {
         // myPID.SetMode(MANUAL);
       }
     }
-    
+
+    if (intakeState == INTAKE && (leftLimit == HIGH || rightLimit == HIGH)) {
+      intakeMotor.stop();
+      intakeState = STOPPED_INTAKE;
+    }
+
+
     // Read message from Android
     int len = acc.read(rxBuf, sizeof(rxBuf), 1);
     if (len > 0) {
@@ -248,12 +300,12 @@ void loop() {
 
       /*
       Serial.println(command);
-      Serial.print("Speed = "); 
-      Serial.println(speedMotor);
-      Serial.print("Distance = "); 
-      Serial.println(distance);
-      Serial.println(" ");
-      */
+       Serial.print("Speed = "); 
+       Serial.println(speedMotor);
+       Serial.print("Distance = "); 
+       Serial.println(distance);
+       Serial.println(" ");
+       */
 
       // Do something with the recieved messages
       if (command.equalsIgnoreCase("Forward")){
@@ -294,43 +346,43 @@ void loop() {
         isOverride = 1;
       }
       else if (command.equalsIgnoreCase("Rotate_CW")){
-        
+
         // Uncomment to make robot stop rotating on side proximity
         /*
         if (right_distance > 10) { 
-          drive.rotateCCW(speedMotor);
-          driveState = ROTATE_RIGHT;
-          isOverride = 0;
-        }
-        else {
-          drive.stop();
-          driveState = STOPPED;
-          isOverride = 0;
-          acc.write(sensorRejectMessage, sizeof(sensorRejectMessage));
-        }
-        */
-        
+         drive.rotateCCW(speedMotor);
+         driveState = ROTATE_RIGHT;
+         isOverride = 0;
+         }
+         else {
+         drive.stop();
+         driveState = STOPPED;
+         isOverride = 0;
+         acc.write(sensorRejectMessage, sizeof(sensorRejectMessage));
+         }
+         */
+
         drive.rotateCCW(speedMotor);
         driveState = ROTATE_RIGHT;
         isOverride = 0;
       }
       else if (command.equalsIgnoreCase("Rotate_CCW")){
-        
+
         // Uncomment to make robot stop rotating on side proximity
         /*
         if (left_distance > 10) { 
-          drive.rotateCW(speedMotor);
-          driveState = ROTATE_LEFT;
-          isOverride = 0;
-        }
-        else {
-          drive.stop();
-          driveState = STOPPED;
-          isOverride = 0;
-          acc.write(sensorRejectMessage, sizeof(sensorRejectMessage));
-        }
-        */
-        
+         drive.rotateCW(speedMotor);
+         driveState = ROTATE_LEFT;
+         isOverride = 0;
+         }
+         else {
+         drive.stop();
+         driveState = STOPPED;
+         isOverride = 0;
+         acc.write(sensorRejectMessage, sizeof(sensorRejectMessage));
+         }
+         */
+
         drive.rotateCW(speedMotor);
         driveState = ROTATE_LEFT;
         isOverride = 0;
@@ -345,6 +397,7 @@ void loop() {
         intakeMotor.stop();
         driveState = STOPPED;
         isOverride = 0;
+        intakeState = STOPPED_INTAKE;
       }
       else if (command.equalsIgnoreCase("Drive_distance")) {
         // If command is to move forward
@@ -383,7 +436,7 @@ void loop() {
           drive.drive(speedMotor, distance);
           driveState = FORWARD;
           isOverride = 1;
-        // If command is to move backward
+          // If command is to move backward
         } 
         else if (distance < 0) {
           drive.drive(speedMotor, distance);
@@ -392,13 +445,20 @@ void loop() {
         }
       }
       else if (command.equalsIgnoreCase("Intake")) {
-        intakeMotor.moveForward(speedMotor);
+        intakeMotor.moveBackward(speedMotor);
+        intakeState = INTAKE;
       }
       else if (command.equalsIgnoreCase("Outtake")) {
-        intakeMotor.moveBackward(speedMotor);
+        intakeMotor.moveForward(speedMotor);
+        intakeState = REVERSE_INTAKE;
       }
+      else if (command.equalsIgnoreCase("Eject")) {
+        intakeMotor.moveBackward(speedMotor);
+        intakeState = EJECT;
+      }     
       else if (command.equalsIgnoreCase("Stop_Intake")) {
         intakeMotor.stop();
+        intakeState = STOPPED_INTAKE;
       }
       else if (command.equalsIgnoreCase("Tank_Drive")) {
         drive.tankDrive(speedMotorL, speedMotorR);
@@ -407,7 +467,12 @@ void loop() {
       else if (command.equalsIgnoreCase("Drive_Straight")) {
         driveState = DRIVING_STRAIGHT;
         isOverride = 0;
-       // myPID.SetMode(AUTOMATIC);
+        // myPID.SetMode(AUTOMATIC);
+      }
+      else if (command.equalsIgnoreCase("Drive_Spiral")) {
+        driveState = DRIVING_SPIRAL;
+        isOverride = 0;
+        // myPID.SetMode(AUTOMATIC);
       }
       else if (command.equalsIgnoreCase("Approach_Wall")) {
         if ( frontLeft_distance > DIST_THRESHOLD_APPROACH 
@@ -433,5 +498,10 @@ void loop() {
     isOverride = 0;
   }
 }
-        
+
+
+
+
+
+
 
