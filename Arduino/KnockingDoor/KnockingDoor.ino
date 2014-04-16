@@ -20,6 +20,7 @@ char offMessage[] = "Nope. Lost it.";
 
 char sensorStopMessage[] = "SENSOR_STOP";
 char sensorRejectMessage[] = "SENSOR_REJECT";
+String drivingStateString;
 
 AndroidAccessory acc(manufacturer,
 model,
@@ -96,7 +97,7 @@ INTAKE_STATE intakeState = STOPPED_INTAKE;
 int isOverride = 0;
 
 // P controller constants
-double k_p = 1.5, minValue = 150;  
+double k_p = 1.75, minValue = 150;  
 
 
 //----------PID CONTROLLER STUFF----------
@@ -108,21 +109,21 @@ double k_p = 1.5, minValue = 150;
 //----------------------------------------
 
 void interrupt2() { 
-  //drive.countTicks1(); 
+  drive.countTicks1(); 
 }
 void interrupt3() { 
-  //drive.countTicks2(); 
+  drive.countTicks2(); 
 }
 
 void setup() {
   Serial.begin(115200);
 
-  drive.initializeMotors(motorPin1, motorDirectionPin1, encoderPin1, motorPin2, motorDirectionPin2, encoderPin2, 47, 59);
+  drive.initializeMotors(motorPin1, motorDirectionPin1, encoderPin1, motorPin2, motorDirectionPin2, encoderPin2, 75, 59);
 
-  intakeMotor.initialize(motorIntakePin, motorIntakeDirectionPin, -1, 47, 59);
+  intakeMotor.initialize(motorIntakePin, motorIntakeDirectionPin, -1, 75, 59);
 
-  attachInterrupt(2, interrupt2, RISING);
-  attachInterrupt(3, interrupt3, RISING);
+  attachInterrupt(4, interrupt2, RISING);
+  attachInterrupt(5, interrupt3, RISING);
 
   // Distance Sensor
   pinMode(frontLeft_distanceSensorPin, INPUT);
@@ -181,32 +182,33 @@ void loop() {
     leftLimit = LOW;
     rightLimit = LOW;
 
+    /*
     // Print raw and smoothed distances for debugging purposes
-    Serial.println("---------------------------------------------");
-    Serial.println("Raw Distances:");
-    Serial.print("Front Left = "); 
-    Serial.println(frontLeft_distance_raw); 
-    Serial.print("Front Right = ");  
-    Serial.println(frontRight_distance_raw);
-    Serial.print("Rear = ");  
-    Serial.println(rear_distance_raw);
-    Serial.print("Left = "); 
-    Serial.println(left_distance_raw);
-    Serial.print("Right = ");  
-    Serial.println(right_distance_raw);
-    Serial.println("\nSmoothed Distances:");
-    Serial.print("Front Left = "); 
-    Serial.println(frontLeft_distance); 
-    Serial.print("Front Right = ");  
-    Serial.println(frontRight_distance);
-    Serial.print("Rear = ");  
-    Serial.println(rear_distance);
-    Serial.print("Left = "); 
-    Serial.println(left_distance);
-    Serial.print("Right = ");  
-    Serial.println(right_distance);
-    Serial.println("---------------------------------------------\n");
-
+     Serial.println("---------------------------------------------");
+     Serial.println("Raw Distances:");
+     Serial.print("Front Left = "); 
+     Serial.println(frontLeft_distance_raw); 
+     Serial.print("Front Right = ");  
+     Serial.println(frontRight_distance_raw);
+     Serial.print("Rear = ");  
+     Serial.println(rear_distance_raw);
+     Serial.print("Left = "); 
+     Serial.println(left_distance_raw);
+     Serial.print("Right = ");  
+     Serial.println(right_distance_raw);
+     Serial.println("\nSmoothed Distances:");
+     Serial.print("Front Left = "); 
+     Serial.println(frontLeft_distance); 
+     Serial.print("Front Right = ");  
+     Serial.println(frontRight_distance);
+     Serial.print("Rear = ");  
+     Serial.println(rear_distance);
+     Serial.print("Left = "); 
+     Serial.println(left_distance);
+     Serial.print("Right = ");  
+     Serial.println(right_distance);
+     Serial.println("---------------------------------------------\n");
+     */
 
     // Stop if see a wall (when driving forward or straight w/o override)
     if ( ( frontLeft_distance < DIST_THRESHOLD_NORMAL
@@ -240,9 +242,9 @@ void loop() {
         && right_distance < DIST_RELIABLE_LIMIT ) {
         double difference = left_distance - right_distance;
 
-        int pwmL = min(220 - round(k_p*difference),255); 
+        int pwmL = constrain(220 - round(k_p*difference),0,255); 
         if (pwmL < minValue) pwmL = 0;
-        int pwmR = min(220 + round(k_p*difference),255); 
+        int pwmR = constrain(220 + round(k_p*difference),0,255); 
         if (pwmR < minValue) pwmR = 0;
 
         drive.tankDrive(pwmL, pwmR); // Update drive to reflet those values
@@ -318,14 +320,14 @@ void loop() {
 
       int speedMotorL = speedMotor, speedMotorR = distance;
 
-      /*
+
       Serial.println(command);
-       Serial.print("Speed = "); 
-       Serial.println(speedMotor);
-       Serial.print("Distance = "); 
-       Serial.println(distance);
-       Serial.println(" ");
-       */
+      Serial.print("Speed = "); 
+      Serial.println(speedMotor);
+      Serial.print("Distance = "); 
+      Serial.println(distance);
+      Serial.println(" ");
+
 
       // Do something with the recieved messages
       if (command.equalsIgnoreCase("Forward")){
@@ -421,6 +423,8 @@ void loop() {
       }
       else if (command.equalsIgnoreCase("Drive_distance")) {
         // If command is to move forward
+        Serial.print("I'm here, Distance = "); Serial.println(distance);
+        
         if (distance > 0) {
           if ( frontLeft_distance > DIST_THRESHOLD_NORMAL
             && frontRight_distance > DIST_THRESHOLD_NORMAL ) { 
@@ -436,13 +440,15 @@ void loop() {
           }
           // If command is to move backward
         } 
-        else if (distance < 0) {
+        else {
           if ( rear_distance > DIST_THRESHOLD_NORMAL ) { 
+            Serial.println("I made it");
             drive.drive(speedMotor, distance);
             driveState = BACKWARD;
             isOverride = 0;
           } 
           else {
+            Serial.println("You have failed Dan!");
             drive.stop();
             driveState = STOPPED;
             isOverride = 0;
@@ -508,6 +514,13 @@ void loop() {
           acc.write(sensorRejectMessage, sizeof(sensorRejectMessage));
         }
       }
+
+      drivingStateString = "Driving State = ";
+      drivingStateString += driveState;
+      char drivingStateChars[35];
+      drivingStateString.toCharArray(drivingStateChars, drivingStateString.length());
+      acc.write(drivingStateChars, sizeof(drivingStateChars));
+
     }  
   } 
   else {
@@ -518,6 +531,7 @@ void loop() {
     isOverride = 0;
   }
 }
+
 
 
 
