@@ -12,8 +12,8 @@
 #define DIST_RELIABLE_LIMIT 40
 
 char manufacturer[] = "Rose-Hulman";
-//char model[] = "GCMADKService";
-char model[] = "WirelessRobotController";
+char model[] = "GCMADKService";
+// char model[] = "WirelessRobotController";
 char versionStr[] = "1.0";
 char onMessage[] = "I have an idea!";                                                                                                                                                                                                                                                                                                                                                                                                                 
 char offMessage[] = "Nope. Lost it.";
@@ -176,8 +176,8 @@ void loop() {
     right_distance = ( (1-LAMBDA) * right_distance_raw ) + ( LAMBDA * right_distance );
 
     // Read Limit Switches
-//    leftLimit = digitalRead(leftLimitSwitchPin);
-//    rightLimit = digitalRead(rightLimitSwitchPin);
+    //    leftLimit = digitalRead(leftLimitSwitchPin);
+    //    rightLimit = digitalRead(rightLimitSwitchPin);
     leftLimit = LOW;
     rightLimit = LOW;
 
@@ -234,7 +234,7 @@ void loop() {
      */
 
     // Drive straight PWM control step
-    if (driveState == DRIVING_STRAIGHT || driveState == DRIVING_SPIRAL) {
+    if (driveState == DRIVING_STRAIGHT ) {
       // If the walls are close enough to be reliable
       if ( left_distance < DIST_RELIABLE_LIMIT
         && right_distance < DIST_RELIABLE_LIMIT ) {
@@ -264,6 +264,26 @@ void loop() {
         driveState = STOPPED;
         acc.write(sensorStopMessage, sizeof(sensorStopMessage));
         // myPID.SetMode(MANUAL);
+      }
+    }
+    else if (driveState == DRIVING_SPIRAL) {
+      // If the walls are close enough to be reliable
+      if ( left_distance < DIST_RELIABLE_LIMIT
+        && right_distance < DIST_RELIABLE_LIMIT ) {
+        double difference = left_distance - right_distance;
+
+        int pwmL = constrain(215 - round(k_p*difference),0,255); 
+        if (pwmL < minValue) pwmL = 0;
+        int pwmR = constrain(225 + round(k_p*difference),0,255); 
+        if (pwmR < minValue) pwmR = 0;
+
+        drive.tankDrive(pwmL, pwmR); // Update drive to reflet those values
+      }
+      else {
+        // Stop if walls are far away
+        drive.stop();
+        driveState = STOPPED;
+        acc.write(sensorStopMessage, sizeof(sensorStopMessage));
       }
     }
 
@@ -498,6 +518,7 @@ void loop() {
     isOverride = 0;
   }
 }
+
 
 
 
